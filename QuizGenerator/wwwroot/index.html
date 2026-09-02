@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CineQuiz — Soru Üretim Konsolu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">CQ</span>
+        <div class="brand-text">
+          <h1>CineQuiz Konsolu</h1>
+          <p>Claude &amp; Gemini çapraz denetimli soru üretimi</p>
+        </div>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="generate" role="tab" aria-selected="true">Üret</button>
+        <button class="tab" data-tab="bulk" role="tab" aria-selected="false">Toplu Üret</button>
+        <button class="tab" data-tab="recent" role="tab" aria-selected="false">Son Eklenenler</button>
+        <button class="tab" data-tab="audit" role="tab" aria-selected="false">Var Olanları Denetle</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ÜRETİM SEKMESİ -->
+    <section id="panel-generate" class="panel active">
+      <div class="card form-card">
+        <h2>Yeni içerik için soru üret</h2>
+        <form id="generate-form">
+          <div class="field">
+            <label for="contentName">İçerik adı</label>
+            <input id="contentName" name="contentName" type="text" placeholder="örn. The Godfather" required />
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="contentType">Tür</label>
+              <select id="contentType" name="contentType">
+                <option value="movie">Film</option>
+                <option value="series">Dizi</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="questionCount">Soru sayısı</label>
+              <select id="questionCount" name="questionCount">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Diller</label>
+            <div class="checkbox-row">
+              <label class="checkbox"><input type="checkbox" name="lang" value="tr" checked /> Türkçe</label>
+              <label class="checkbox"><input type="checkbox" name="lang" value="en" checked /> English</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="referenceNote">Karakter / bilgi notu <span style="text-transform:none;font-weight:400;color:var(--text-muted)">(opsiyonel ama önerilir)</span></label>
+            <textarea id="referenceNote" name="referenceNote" rows="5"
+              placeholder="Doğru karakter isimlerini ve ilişkilerini buraya yapıştır (ör. Wikipedia'dan). AI SADECE bunları kaynak alır, isim uydurmaz.&#10;Örn:&#10;- Mira Beylice — anne: Ender, baba: Faruk Beylice&#10;- Yaman Koper — Tozludere'de büyür; Selim Serez (avukat) onu Altınkoy'a alır&#10;- Mert Serez — Selim'in oğlu; tutkuları: çizgi roman, yelken"
+              style="width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:var(--font-mono);font-size:12px;resize:vertical"></textarea>
+            <p class="muted" style="font-size:12px;margin-top:6px">Boş bırakabilirsin; ama isim hatalarını önlemenin en etkili yolu burayı doldurmaktır.</p>
+          </div>
+
+          <div class="field">
+            <label class="checkbox" style="text-transform:none;font-weight:500;color:var(--text)">
+              <input type="checkbox" id="replaceExisting" />
+              Bu içerik+dil için önceki AI sorularını sil, baştan oluştur (aksi halde üzerine eklenir)
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="checkbox" style="text-transform:none;font-weight:500;color:var(--amber)">
+              <input type="checkbox" id="manualMode" />
+              Manuel Claude Modu — API'ye ödeme yapmadan, claude.ai (Pro) hesabınla kopyala-yapıştır ile ilerle
+            </label>
+          </div>
+
+          <button type="submit" class="btn-primary" id="generate-btn">
+            <span class="btn-label">Üret</span>
+          </button>
+        </form>
+      </div>
+
+      <div id="generate-status" class="status hidden"></div>
+      <div id="generate-results"></div>
+    </section>
+
+    <!-- TOPLU ÜRETİM SEKMESİ -->
+    <section id="panel-bulk" class="panel">
+      <div class="card form-card">
+        <h2>Tüm içerikler için toplu üret</h2>
+        <p class="muted" style="margin-top:-4px">
+          Veritabanındaki her içerik için, <strong>iki Gemini personası</strong> (farklı odak + sıcaklık, birbirini
+          denetler) ile soru üretir. Her içerik önce <strong>web'de aranıp</strong> (Google Search grounding) doğru
+          karakter listesi prompt'a eklenir — böylece isim uydurma en aza iner. Var olan sorulara bakıp
+          <strong>benzer olmayan yeni</strong> sorular ekler. Uzun sürer; arka planda çalışır, ilerlemeyi buradan izlersin.
+        </p>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Diller</label>
+            <div class="checkbox-row">
+              <label class="checkbox"><input type="checkbox" name="bulk-lang" value="tr" checked /> Türkçe</label>
+              <label class="checkbox"><input type="checkbox" name="bulk-lang" value="en" checked /> English</label>
+            </div>
+          </div>
+          <div class="field">
+            <label for="bulk-count">İçerik + dil başına yeni soru</label>
+            <select id="bulk-count">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="bulk-default-type">İçerik tipi</label>
+            <select id="bulk-default-type">
+              <option value="auto" selected>Karışık — otomatik algıla (dizi + film)</option>
+              <option value="series">Hepsi dizi</option>
+              <option value="movie">Hepsi film</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="bulk-limit">En fazla içerik <span style="text-transform:none;font-weight:400;color:var(--text-muted)">(boş = hepsi; önce küçük dene)</span></label>
+            <input id="bulk-limit" type="number" min="1" placeholder="örn. 5" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="bulk-start-after">Şu ID'den sonra başla <span style="text-transform:none;font-weight:400;color:var(--text-muted)">(kotadan sonra devam için)</span></label>
+            <input id="bulk-start-after" type="number" min="0" placeholder="boş = baştan" />
+          </div>
+          <div class="field">
+            <label for="bulk-delay">İçerikler arası bekleme (ms) <span style="text-transform:none;font-weight:400;color:var(--text-muted)">(limit yerse artır)</span></label>
+            <input id="bulk-delay" type="number" min="0" value="0" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="checkbox" style="text-transform:none;font-weight:600;color:var(--green)">
+            <input type="checkbox" id="bulk-draft" checked /> Onaysız taslak olarak ekle (önerilir) — sorular IsApproved=false kaydedilir, "Son Eklenenler"den onaylayana kadar
+          </label>
+          <p class="muted" style="font-size:12px;margin-top:6px">⚠️ Bu, oyuncuları ancak uygulaman <strong>sadece onaylı</strong> soruları gösteriyorsa korur. Emin değilsen: bir tane taslak üret, admin sayfasında görünüyor mu bak.</p>
+        </div>
+
+        <div class="field">
+          <label class="checkbox" style="text-transform:none;font-weight:500;color:var(--text)">
+            <input type="checkbox" id="bulk-grounding" checked /> Web araması (grounding) kullan — kapatırsan daha hızlı ama isim hatası riski artar
+          </label>
+        </div>
+        <div class="field">
+          <label class="checkbox" style="text-transform:none;font-weight:500;color:var(--text)">
+            <input type="checkbox" id="bulk-inactive" /> Pasif (IsActive=false) içerikleri de dahil et
+          </label>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center">
+          <button type="button" class="btn-primary" id="bulk-start-btn"><span class="btn-label">Toplu Üretimi Başlat</span></button>
+          <button type="button" class="btn-secondary hidden" id="bulk-cancel-btn">Durdur</button>
+        </div>
+      </div>
+
+      <div id="bulk-progress" class="hidden"></div>
+    </section>
+
+    <!-- SON EKLENENLER / ONAY BEKLEYENLER SEKMESİ -->
+    <section id="panel-recent" class="panel">
+      <div class="card">
+        <div class="audit-header">
+          <div>
+            <h2>Son eklenen sorular</h2>
+            <p class="muted">Toplu üretimin çıktısını buradan gözden geçir: yanlışları <strong>sil</strong>, doğruları <strong>onayla</strong> (taslak → canlı), bozuk şıkları <strong>düzelt</strong>. En yeni en üstte.</p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <label class="checkbox" style="text-transform:none"><input type="checkbox" id="recent-only-drafts" checked /> Sadece onay bekleyenler</label>
+            <select id="recent-limit" style="min-width:120px">
+              <option value="50">Son 50</option>
+              <option value="100" selected>Son 100</option>
+              <option value="200">Son 200</option>
+              <option value="500">Son 500</option>
+            </select>
+            <button id="recent-refresh-btn" class="btn-secondary">Yenile</button>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <input id="recent-filter" type="text" placeholder="İçerik adına göre filtrele (örn. Medcezir)…" style="width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px" />
+        </div>
+        <div id="recent-summary" class="hidden" style="margin-top:12px"></div>
+      </div>
+
+      <div id="recent-toolbar" class="card hidden" style="display:flex;align-items:center;gap:16px;padding:14px 20px;flex-wrap:wrap">
+        <label class="checkbox" style="text-transform:none"><input type="checkbox" id="recent-select-all" /> Tümünü seç</label>
+        <span id="recent-selected-count" class="muted" style="font-size:13px">0 seçili</span>
+        <div style="margin-left:auto;display:flex;gap:10px">
+          <button id="recent-approve-btn" class="btn-primary" disabled>Seçilenleri Onayla</button>
+          <button id="recent-delete-btn" class="btn-secondary" disabled>Seçilenleri Sil</button>
+        </div>
+      </div>
+
+      <div id="recent-results"></div>
+    </section>
+
+    <!-- Manuel Claude köprüsü kutusu - üret VE denetle sekmelerinden tetiklenebildiği için
+         panellerin dışında, her iki sekmeden de görünür şekilde duruyor -->
+    <div id="manual-flow" class="hidden"></div>
+
+    <!-- DENETİM SEKMESİ -->
+    <section id="panel-audit" class="panel">
+      <div class="card">
+        <div class="audit-header">
+          <div>
+            <h2>Var olan soruları tara</h2>
+            <p class="muted">Cevap sızıntısı kalıplarını (parantez, uzunluk/üslup dengesizliği) AI kullanmadan, ücretsiz olarak bulur.</p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button id="backfill-btn" class="btn-secondary">Embedding'leri Doldur</button>
+            <button id="audit-btn" class="btn-secondary">Taramayı Başlat</button>
+          </div>
+        </div>
+                <div id="backfill-summary" class="hidden"></div>
+        <div id="audit-summary" class="hidden"></div>
+      </div>
+
+      <div id="audit-toolbar" class="card hidden" style="display:flex;align-items:center;gap:16px;padding:14px 20px">
+        <label class="checkbox" style="text-transform:none"><input type="checkbox" id="audit-select-all" /> Tümünü seç</label>
+        <span id="audit-selected-count" class="muted" style="font-size:13px">0 seçili</span>
+        <button id="audit-batch-fix-btn" class="btn-primary" disabled style="margin-left:auto">Seçilenleri Toplu Düzelt</button>
+      </div>
+
+      <div id="audit-results"></div>
+
+      <div class="card" style="margin-top:24px">
+        <div class="audit-header">
+          <div>
+            <h2>Tekrar eden / çok benzer soruları bul</h2>
+            <p class="muted">Var olan soru havuzunu anlam vektörleriyle karşılaştırır, aynı içerik+dil içinde birbirine çok benzeyen ÇİFTLERİ listeler. Önce "Embedding'leri Doldur" çalıştırılmış olmalı.</p>
+          </div>
+          <button id="duplicates-btn" class="btn-secondary">Tekrar Edenleri Bul</button>
+        </div>
+        <div id="duplicates-summary" class="hidden"></div>
+      </div>
+      <div id="duplicates-results"></div>
+    </section>
+
+  </main>
+
+  <template id="tpl-question-row">
+    <tr>
+      <td class="q-text"></td>
+      <td class="q-options"></td>
+      <td class="q-meta"></td>
+      <td class="q-source"></td>
+    </tr>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
